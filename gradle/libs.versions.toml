@@ -1,0 +1,36 @@
+[versions]
+assertj = "3.27.7"
+awsSdk = "2.34.0"
+floci = "1.6.0"
+jackson = "2.21.3"
+junit = "5.14.4"
+logback = "1.5.33"
+palantir = "2.91.0"
+shadow = "9.4.2"
+slf4j = "2.0.18"
+spotless = "8.6.0"
+testcontainers = "1.21.3"
+vertx = "5.0.0.CR7"
+
+[libraries]
+assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+aws-bom = { module = "software.amazon.awssdk:bom", version.ref = "awsSdk" }
+aws-dynamodb = { module = "software.amazon.awssdk:dynamodb" }
+aws-kinesis = { module = "software.amazon.awssdk:kinesis" }
+aws-netty = { module = "software.amazon.awssdk:netty-nio-client" }
+aws-opensearch = { module = "software.amazon.awssdk:opensearch" }
+aws-url-connection-client = { module = "software.amazon.awssdk:url-connection-client" }
+floci-testcontainers = { module = "io.floci:testcontainers-floci", version.ref = "floci" }
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+testcontainers-core = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
+testcontainers-junit5 = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }
+vertx-core = { module = "io.vertx:vertx-core", version.ref = "vertx" }
+vertx-web-client = { module = "io.vertx:vertx-web-client", version.ref = "vertx" }
+
+[plugins]
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
