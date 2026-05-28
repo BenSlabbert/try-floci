@@ -4,15 +4,11 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":model"))
+    implementation(project(":lib"))
     implementation(libs.vertx.core)
     implementation(libs.vertx.launcher.application)
     implementation(libs.slf4j.api)
     implementation(libs.logback.classic)
-
-    implementation(platform(libs.aws.bom))
-    implementation(libs.aws.kinesis)
-    implementation(libs.aws.apache.client)
 
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
@@ -33,7 +29,10 @@ tasks.shadowJar {
     mergeServiceFiles()
     exclude("module-info.class")
     manifest {
-        attributes("Main-Class" to "com.example.producer.Main")
+        attributes(
+            "Main-Class" to "com.example.producer.Main",
+            "Main-Verticle" to "com.example.producer.ProducerVerticle",
+        )
     }
 }
 

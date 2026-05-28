@@ -1,10 +1,8 @@
 package com.example.consumer.opensearch;
 
+import com.example.lib.KinesisVerticle;
 import com.example.model.Event;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClient;
@@ -13,39 +11,22 @@ import java.net.URI;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.http.apache.ApacheHttpClient;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.kinesis.KinesisClient;
-import software.amazon.awssdk.services.kinesis.model.CreateStreamRequest;
 import software.amazon.awssdk.services.kinesis.model.ExpiredIteratorException;
 import software.amazon.awssdk.services.kinesis.model.GetRecordsRequest;
-import software.amazon.awssdk.services.kinesis.model.GetShardIteratorRequest;
 import software.amazon.awssdk.services.kinesis.model.Record;
-import software.amazon.awssdk.services.kinesis.model.ShardIteratorType;
-import software.amazon.awssdk.services.kinesis.model.StreamStatus;
 
-public class ConsumerVerticle extends AbstractVerticle {
+public class ConsumerVerticle extends KinesisVerticle {
 
     private static final Logger log = LoggerFactory.getLogger(ConsumerVerticle.class);
 
-    private KinesisClient kinesisClient;
-    private String streamName;
+    private WebClient webClient;
     private String indexName;
     private final ObjectMapper objectMapper;
 
-    private WebClient webClient;
-    private String shardIterator;
-    private String shardId;
     private long timerId = -1L;
 
     public ConsumerVerticle() {
-        this.objectMapper = new ObjectMapper()
-                .registerModule(new JavaTimeModule())
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        this.objectMapper = createObjectMapper();
     }
 
     @Override
@@ -59,18 +40,8 @@ public class ConsumerVerticle extends AbstractVerticle {
         String opensearchEndpoint = cfg.getString("opensearchEndpoint", "http://localhost:9200");
         indexName = cfg.getString("indexName", "events");
 
-        AwsCredentialsProvider credentials = buildCredentialsProvider(accessKeyId, secretAccessKey);
-
-        var kinesisBuilder = KinesisClient.builder()
-                .region(Region.of(region))
-                .httpClientBuilder(ApacheHttpClient.builder())
-                .credentialsProvider(credentials);
-
-        if (!endpointUrl.isBlank()) {
-            kinesisBuilder.endpointOverride(URI.create(endpointUrl));
-        }
-
-        kinesisClient = kinesisBuilder.build();
+        var credentials = buildCredentialsProvider(accessKeyId, secretAccessKey);
+        kinesisClient = buildKinesisClient(region, endpointUrl, credentials);
 
         URI uri = URI.create(opensearchEndpoint);
         String opensearchHost = uri.getHost();
@@ -104,71 +75,6 @@ public class ConsumerVerticle extends AbstractVerticle {
             kinesisClient.close();
         }
         stopPromise.complete();
-    }
-
-    private static AwsCredentialsProvider buildCredentialsProvider(String accessKeyId, String secretAccessKey) {
-        if (!accessKeyId.isBlank() && !secretAccessKey.isBlank()) {
-            return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKeyId, secretAccessKey));
-        }
-        return DefaultCredentialsProvider.create();
-    }
-
-    private void ensureStreamExists() {
-        try {
-            kinesisClient.createStream(CreateStreamRequest.builder()
-                    .streamName(streamName)
-                    .shardCount(1)
-                    .build());
-            log.info("Created Kinesis stream '{}'", streamName);
-        } catch (software.amazon.awssdk.services.kinesis.model.ResourceInUseException e) {
-            log.info("Kinesis stream '{}' already exists", streamName);
-        }
-        waitForStreamActive();
-    }
-
-    private void waitForStreamActive() {
-        for (int i = 0; i < 30; i++) {
-            try {
-                StreamStatus status = kinesisClient
-                        .describeStream(b -> b.streamName(streamName))
-                        .streamDescription()
-                        .streamStatus();
-                if (StreamStatus.ACTIVE.equals(status)) {
-                    return;
-                }
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException("Interrupted while waiting for stream", e);
-            }
-        }
-        throw new RuntimeException("Timed out waiting for stream '" + streamName + "'");
-    }
-
-    private void initShardIterator() {
-        shardId = kinesisClient
-                .describeStream(b -> b.streamName(streamName))
-                .streamDescription()
-                .shards()
-                .get(0)
-                .shardId();
-        shardIterator = kinesisClient
-                .getShardIterator(GetShardIteratorRequest.builder()
-                        .streamName(streamName)
-                        .shardId(shardId)
-                        .shardIteratorType(ShardIteratorType.TRIM_HORIZON)
-                        .build())
-                .shardIterator();
-    }
-
-    private void refreshShardIterator() {
-        shardIterator = kinesisClient
-                .getShardIterator(GetShardIteratorRequest.builder()
-                        .streamName(streamName)
-                        .shardId(shardId)
-                        .shardIteratorType(ShardIteratorType.LATEST)
-                        .build())
-                .shardIterator();
     }
 
     private void pollAndIndex() {
