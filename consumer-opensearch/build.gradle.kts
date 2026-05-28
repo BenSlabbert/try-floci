@@ -6,13 +6,14 @@ plugins {
 dependencies {
     implementation(project(":model"))
     implementation(libs.vertx.core)
+    implementation(libs.vertx.launcher.application)
     implementation(libs.vertx.web.client)
     implementation(libs.slf4j.api)
     implementation(libs.logback.classic)
 
     implementation(platform(libs.aws.bom))
     implementation(libs.aws.kinesis)
-    implementation(libs.aws.url.connection.client)
+    implementation(libs.aws.apache.client)
 
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
@@ -22,6 +23,7 @@ dependencies {
 
     testImplementation(platform(libs.aws.bom))
     testImplementation(libs.aws.kinesis)
+    testImplementation(libs.aws.opensearch)
     testImplementation(libs.aws.url.connection.client)
 }
 

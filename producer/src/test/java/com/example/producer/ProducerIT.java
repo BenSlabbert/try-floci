@@ -7,7 +7,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.floci.testcontainers.FlociContainer;
+import io.vertx.core.DeploymentOptions;
+import io.vertx.core.ThreadingModel;
 import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonObject;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -60,8 +63,21 @@ class ProducerIT {
 
     @Test
     void shouldPublishEventsToKinesisStream() throws Exception {
-        ProducerVerticle verticle = new ProducerVerticle(kinesisClient, STREAM_NAME);
-        vertx.deployVerticle(verticle).toCompletionStage().toCompletableFuture().get();
+        JsonObject config = new JsonObject()
+                .put("awsEndpointUrl", floci.getEndpoint())
+                .put("awsRegion", floci.getRegion())
+                .put("awsAccessKeyId", floci.getAccessKey())
+                .put("awsSecretAccessKey", floci.getSecretKey())
+                .put("streamName", STREAM_NAME);
+
+        vertx.deployVerticle(
+                        ProducerVerticle.class.getName(),
+                        new DeploymentOptions()
+                                .setThreadingModel(ThreadingModel.VIRTUAL_THREAD)
+                                .setConfig(config))
+                .toCompletionStage()
+                .toCompletableFuture()
+                .get();
 
         Thread.sleep(3500);
 

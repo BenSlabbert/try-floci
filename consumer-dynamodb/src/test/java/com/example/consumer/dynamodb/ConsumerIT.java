@@ -3,7 +3,10 @@ package com.example.consumer.dynamodb;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.floci.testcontainers.FlociContainer;
+import io.vertx.core.DeploymentOptions;
+import io.vertx.core.ThreadingModel;
 import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonObject;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -80,8 +83,22 @@ class ConsumerIT {
         createStream();
         publishTestEvents(3);
 
-        ConsumerVerticle verticle = new ConsumerVerticle(kinesisClient, dynamoDbClient, STREAM_NAME, TABLE_NAME);
-        vertx.deployVerticle(verticle).toCompletionStage().toCompletableFuture().get();
+        JsonObject config = new JsonObject()
+                .put("awsEndpointUrl", floci.getEndpoint())
+                .put("awsRegion", floci.getRegion())
+                .put("awsAccessKeyId", floci.getAccessKey())
+                .put("awsSecretAccessKey", floci.getSecretKey())
+                .put("streamName", STREAM_NAME)
+                .put("tableName", TABLE_NAME);
+
+        vertx.deployVerticle(
+                        ConsumerVerticle.class.getName(),
+                        new DeploymentOptions()
+                                .setThreadingModel(ThreadingModel.VIRTUAL_THREAD)
+                                .setConfig(config))
+                .toCompletionStage()
+                .toCompletableFuture()
+                .get();
 
         Thread.sleep(3000);
 

@@ -13,6 +13,12 @@ import java.net.URI;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.http.apache.ApacheHttpClient;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.kinesis.KinesisClient;
 import software.amazon.awssdk.services.kinesis.model.CreateStreamRequest;
 import software.amazon.awssdk.services.kinesis.model.ExpiredIteratorException;
@@ -26,25 +32,17 @@ public class ConsumerVerticle extends AbstractVerticle {
 
     private static final Logger log = LoggerFactory.getLogger(ConsumerVerticle.class);
 
-    private final KinesisClient kinesisClient;
-    private final String streamName;
-    private final String opensearchEndpoint;
-    private final String indexName;
+    private KinesisClient kinesisClient;
+    private String streamName;
+    private String indexName;
     private final ObjectMapper objectMapper;
 
     private WebClient webClient;
     private String shardIterator;
     private String shardId;
     private long timerId = -1L;
-    private String opensearchHost;
-    private int opensearchPort;
 
-    public ConsumerVerticle(
-            KinesisClient kinesisClient, String streamName, String opensearchEndpoint, String indexName) {
-        this.kinesisClient = kinesisClient;
-        this.streamName = streamName;
-        this.opensearchEndpoint = opensearchEndpoint;
-        this.indexName = indexName;
+    public ConsumerVerticle() {
         this.objectMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -52,9 +50,31 @@ public class ConsumerVerticle extends AbstractVerticle {
 
     @Override
     public void start(Promise<Void> startPromise) {
+        JsonObject cfg = config();
+        String endpointUrl = cfg.getString("awsEndpointUrl", "");
+        String region = cfg.getString("awsRegion", "us-east-1");
+        String accessKeyId = cfg.getString("awsAccessKeyId", "");
+        String secretAccessKey = cfg.getString("awsSecretAccessKey", "");
+        streamName = cfg.getString("streamName", "events");
+        String opensearchEndpoint = cfg.getString("opensearchEndpoint", "http://localhost:9200");
+        indexName = cfg.getString("indexName", "events");
+
+        AwsCredentialsProvider credentials = buildCredentialsProvider(accessKeyId, secretAccessKey);
+
+        var kinesisBuilder = KinesisClient.builder()
+                .region(Region.of(region))
+                .httpClientBuilder(ApacheHttpClient.builder())
+                .credentialsProvider(credentials);
+
+        if (!endpointUrl.isBlank()) {
+            kinesisBuilder.endpointOverride(URI.create(endpointUrl));
+        }
+
+        kinesisClient = kinesisBuilder.build();
+
         URI uri = URI.create(opensearchEndpoint);
-        opensearchHost = uri.getHost();
-        opensearchPort = uri.getPort() < 0 ? 9200 : uri.getPort();
+        String opensearchHost = uri.getHost();
+        int opensearchPort = uri.getPort() < 0 ? 9200 : uri.getPort();
 
         webClient = WebClient.create(
                 vertx, new WebClientOptions().setDefaultHost(opensearchHost).setDefaultPort(opensearchPort));
@@ -80,7 +100,17 @@ public class ConsumerVerticle extends AbstractVerticle {
         if (webClient != null) {
             webClient.close();
         }
+        if (kinesisClient != null) {
+            kinesisClient.close();
+        }
         stopPromise.complete();
+    }
+
+    private static AwsCredentialsProvider buildCredentialsProvider(String accessKeyId, String secretAccessKey) {
+        if (!accessKeyId.isBlank() && !secretAccessKey.isBlank()) {
+            return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKeyId, secretAccessKey));
+        }
+        return DefaultCredentialsProvider.create();
     }
 
     private void ensureStreamExists() {
