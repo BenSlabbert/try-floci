@@ -12,7 +12,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.awssdk.http.apache.ApacheHttpClient;
+import software.amazon.awssdk.http.apache5.Apache5HttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
@@ -57,7 +57,7 @@ public class ConsumerVerticle extends KinesisVerticle {
 
         var dynamoBuilder = DynamoDbClient.builder()
                 .region(Region.of(region))
-                .httpClientBuilder(ApacheHttpClient.builder())
+                .httpClientBuilder(Apache5HttpClient.builder())
                 .credentialsProvider(credentials);
 
         if (!endpointUrl.isBlank()) {

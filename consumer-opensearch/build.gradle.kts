@@ -19,7 +19,6 @@ dependencies {
 
     testImplementation(platform(libs.aws.bom))
     testImplementation(libs.aws.kinesis)
-    testImplementation(libs.aws.opensearch)
     testImplementation(libs.aws.url.connection.client)
 }
 
