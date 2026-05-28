@@ -1,0 +1,4 @@
+Manifest-Version: 1.0
+Main-Class: com.example.consumer.opensearch.Main
+Multi-Release: true
+
