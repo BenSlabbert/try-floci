@@ -4,14 +4,13 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":model"))
+    implementation(project(":lib"))
     implementation(libs.vertx.core)
     implementation(libs.vertx.launcher.application)
     implementation(libs.slf4j.api)
     implementation(libs.logback.classic)
 
     implementation(platform(libs.aws.bom))
-    implementation(libs.aws.kinesis)
     implementation(libs.aws.dynamodb)
     implementation(libs.aws.apache.client)
 
@@ -35,7 +34,10 @@ tasks.shadowJar {
     mergeServiceFiles()
     exclude("module-info.class")
     manifest {
-        attributes("Main-Class" to "com.example.consumer.dynamodb.Main")
+        attributes(
+            "Main-Class" to "com.example.consumer.dynamodb.Main",
+            "Main-Verticle" to "com.example.consumer.dynamodb.ConsumerVerticle",
+        )
     }
 }
 
