@@ -12,7 +12,7 @@ dependencies {
 
     implementation(platform(libs.aws.bom))
     implementation(libs.aws.dynamodb)
-    implementation(libs.aws.apache.client)
+    implementation(libs.aws.apache5.client)
 
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)

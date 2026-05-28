@@ -11,7 +11,7 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.http.apache.ApacheHttpClient;
+import software.amazon.awssdk.http.apache5.Apache5HttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.kinesis.KinesisClient;
 import software.amazon.awssdk.services.kinesis.model.CreateStreamRequest;
@@ -45,7 +45,7 @@ public abstract class KinesisVerticle extends AbstractVerticle {
     protected KinesisClient buildKinesisClient(String region, String endpointUrl, AwsCredentialsProvider credentials) {
         var builder = KinesisClient.builder()
                 .region(Region.of(region))
-                .httpClientBuilder(ApacheHttpClient.builder())
+                .httpClientBuilder(Apache5HttpClient.builder())
                 .credentialsProvider(credentials);
         if (!endpointUrl.isBlank()) {
             builder.endpointOverride(URI.create(endpointUrl));

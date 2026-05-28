@@ -1,6 +1,6 @@
 [versions]
 assertj = "3.27.7"
-awsSdk = "2.34.0"
+awsSdk = "2.44.14"
 floci = "1.6.0"
 jackson = "2.21.3"
 junit = "5.14.4"
@@ -14,7 +14,7 @@ vertx = "5.1.0"
 
 [libraries]
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
-aws-apache-client = { module = "software.amazon.awssdk:apache-client" }
+aws-apache5-client = { module = "software.amazon.awssdk:apache5-client" }
 aws-bom = { module = "software.amazon.awssdk:bom", version.ref = "awsSdk" }
 aws-dynamodb = { module = "software.amazon.awssdk:dynamodb" }
 aws-kinesis = { module = "software.amazon.awssdk:kinesis" }

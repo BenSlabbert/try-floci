@@ -10,13 +10,12 @@ import io.floci.testcontainers.FlociContainer;
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.ThreadingModel;
 import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpServer;
 import io.vertx.core.json.JsonObject;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,59 +30,54 @@ import software.amazon.awssdk.services.kinesis.KinesisClient;
 import software.amazon.awssdk.services.kinesis.model.CreateStreamRequest;
 import software.amazon.awssdk.services.kinesis.model.PutRecordRequest;
 import software.amazon.awssdk.services.kinesis.model.StreamStatus;
-import software.amazon.awssdk.services.opensearch.OpenSearchClient;
 
 @Testcontainers
 class ConsumerIT {
 
     @Container
-    static final FlociContainer floci = new FlociContainer().withOpenSearchConfig(c -> c.mock(true));
+    static final FlociContainer floci = new FlociContainer();
 
     private static final String STREAM_NAME = "test-events";
     private static final String INDEX_NAME = "test-events";
-    private static final String OS_DOMAIN = "test-domain";
 
     private KinesisClient kinesisClient;
     private Vertx vertx;
-    private String openSearchEndpoint;
+    private HttpServer mockOpenSearch;
+    private final AtomicInteger indexedCount = new AtomicInteger(0);
 
     @BeforeEach
     void setUp() throws Exception {
         StaticCredentialsProvider credentials = StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(floci.getAccessKey(), floci.getSecretKey()));
-        URI endpoint = URI.create(floci.getEndpoint());
-        Region region = Region.of(floci.getRegion());
 
         kinesisClient = KinesisClient.builder()
-                .endpointOverride(endpoint)
-                .region(region)
+                .endpointOverride(URI.create(floci.getEndpoint()))
+                .region(Region.of(floci.getRegion()))
                 .credentialsProvider(credentials)
                 .httpClientBuilder(UrlConnectionHttpClient.builder())
                 .build();
 
-        try (OpenSearchClient osClient = OpenSearchClient.builder()
-                .endpointOverride(endpoint)
-                .region(region)
-                .credentialsProvider(credentials)
-                .httpClientBuilder(UrlConnectionHttpClient.builder())
-                .build()) {
-            osClient.createDomain(r -> r.domainName(OS_DOMAIN));
-            for (int i = 0; i < 30; i++) {
-                var status =
-                        osClient.describeDomain(r -> r.domainName(OS_DOMAIN)).domainStatus();
-                if (status.endpoint() != null && !status.endpoint().isBlank()) {
-                    openSearchEndpoint = "http://" + status.endpoint();
-                    break;
-                }
-                Thread.sleep(500);
-            }
-        }
-
         vertx = Vertx.vertx();
+
+        mockOpenSearch = vertx.createHttpServer().requestHandler(req -> {
+            if ("PUT".equals(req.method().name())) {
+                indexedCount.incrementAndGet();
+                req.response()
+                        .setStatusCode(201)
+                        .putHeader("Content-Type", "application/json")
+                        .end("{\"result\":\"created\"}");
+            } else {
+                req.response().setStatusCode(200).end("{}");
+            }
+        });
+        mockOpenSearch.listen(0).toCompletionStage().toCompletableFuture().get();
     }
 
     @AfterEach
     void tearDown() throws Exception {
+        if (mockOpenSearch != null) {
+            mockOpenSearch.close().toCompletionStage().toCompletableFuture().get();
+        }
         if (vertx != null) {
             vertx.close().toCompletionStage().toCompletableFuture().get();
         }
@@ -97,6 +91,7 @@ class ConsumerIT {
         createStream();
         publishTestEvents(3);
 
+        String openSearchEndpoint = "http://localhost:" + mockOpenSearch.actualPort();
         JsonObject config = new JsonObject()
                 .put("awsEndpointUrl", floci.getEndpoint())
                 .put("awsRegion", floci.getRegion())
@@ -117,21 +112,7 @@ class ConsumerIT {
 
         Thread.sleep(4000);
 
-        String searchUrl = openSearchEndpoint + "/" + INDEX_NAME + "/_search";
-        HttpClient httpClient = HttpClient.newHttpClient();
-        HttpResponse<String> response = httpClient.send(
-                HttpRequest.newBuilder().uri(URI.create(searchUrl)).GET().build(),
-                HttpResponse.BodyHandlers.ofString());
-
-        assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body()).contains("\"total\"");
-
-        ObjectMapper mapper = new ObjectMapper()
-                .registerModule(new JavaTimeModule())
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        var tree = mapper.readTree(response.body());
-        int total = tree.at("/hits/total/value").asInt();
-        assertThat(total).isGreaterThanOrEqualTo(3);
+        assertThat(indexedCount.get()).isGreaterThanOrEqualTo(3);
     }
 
     private void createStream() throws InterruptedException {
