@@ -20,6 +20,5 @@
       }
     }
   },
-  "forwardPorts": [4566, 9200],
   "postCreateCommand": "chmod +x gradlew && ./gradlew --version"
 }
