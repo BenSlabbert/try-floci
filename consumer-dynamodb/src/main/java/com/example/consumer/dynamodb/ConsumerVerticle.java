@@ -6,11 +6,19 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
+import io.vertx.core.json.JsonObject;
+import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.http.apache.ApacheHttpClient;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -34,22 +42,17 @@ public class ConsumerVerticle extends AbstractVerticle {
 
     private static final Logger log = LoggerFactory.getLogger(ConsumerVerticle.class);
 
-    private final KinesisClient kinesisClient;
-    private final DynamoDbClient dynamoDbClient;
-    private final String streamName;
-    private final String tableName;
+    private KinesisClient kinesisClient;
+    private DynamoDbClient dynamoDbClient;
+    private String streamName;
+    private String tableName;
     private final ObjectMapper objectMapper;
 
     private String shardIterator;
     private String shardId;
     private long timerId = -1L;
 
-    public ConsumerVerticle(
-            KinesisClient kinesisClient, DynamoDbClient dynamoDbClient, String streamName, String tableName) {
-        this.kinesisClient = kinesisClient;
-        this.dynamoDbClient = dynamoDbClient;
-        this.streamName = streamName;
-        this.tableName = tableName;
+    public ConsumerVerticle() {
         this.objectMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -57,6 +60,34 @@ public class ConsumerVerticle extends AbstractVerticle {
 
     @Override
     public void start(Promise<Void> startPromise) {
+        JsonObject cfg = config();
+        String endpointUrl = cfg.getString("awsEndpointUrl", "");
+        String region = cfg.getString("awsRegion", "us-east-1");
+        String accessKeyId = cfg.getString("awsAccessKeyId", "");
+        String secretAccessKey = cfg.getString("awsSecretAccessKey", "");
+        streamName = cfg.getString("streamName", "events");
+        tableName = cfg.getString("tableName", "events");
+
+        AwsCredentialsProvider credentials = buildCredentialsProvider(accessKeyId, secretAccessKey);
+
+        var kinesisBuilder = KinesisClient.builder()
+                .region(Region.of(region))
+                .httpClientBuilder(ApacheHttpClient.builder())
+                .credentialsProvider(credentials);
+        var dynamoBuilder = DynamoDbClient.builder()
+                .region(Region.of(region))
+                .httpClientBuilder(ApacheHttpClient.builder())
+                .credentialsProvider(credentials);
+
+        if (!endpointUrl.isBlank()) {
+            URI endpoint = URI.create(endpointUrl);
+            kinesisBuilder.endpointOverride(endpoint);
+            dynamoBuilder.endpointOverride(endpoint);
+        }
+
+        kinesisClient = kinesisBuilder.build();
+        dynamoDbClient = dynamoBuilder.build();
+
         vertx.executeBlocking(() -> {
                     ensureStreamExists();
                     ensureTableExists();
@@ -76,7 +107,20 @@ public class ConsumerVerticle extends AbstractVerticle {
         if (timerId >= 0) {
             vertx.cancelTimer(timerId);
         }
+        if (kinesisClient != null) {
+            kinesisClient.close();
+        }
+        if (dynamoDbClient != null) {
+            dynamoDbClient.close();
+        }
         stopPromise.complete();
+    }
+
+    private static AwsCredentialsProvider buildCredentialsProvider(String accessKeyId, String secretAccessKey) {
+        if (!accessKeyId.isBlank() && !secretAccessKey.isBlank()) {
+            return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKeyId, secretAccessKey));
+        }
+        return DefaultCredentialsProvider.create();
     }
 
     private void ensureStreamExists() {

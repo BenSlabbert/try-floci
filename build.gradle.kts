@@ -3,6 +3,7 @@ plugins {
 }
 
 val palantirVersion = libs.versions.palantir.get()
+val junitPlatformLauncher = libs.junit.platform.launcher
 
 subprojects {
     apply(plugin = "java")
@@ -31,5 +32,9 @@ subprojects {
 
     tasks.withType<Test> {
         useJUnitPlatform()
+    }
+
+    dependencies {
+        "testRuntimeOnly"(junitPlatformLauncher)
     }
 }

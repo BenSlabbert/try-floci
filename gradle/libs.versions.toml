@@ -14,12 +14,14 @@ vertx = "5.0.0.CR7"
 
 [libraries]
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+aws-apache-client = { module = "software.amazon.awssdk:apache-client" }
 aws-bom = { module = "software.amazon.awssdk:bom", version.ref = "awsSdk" }
 aws-dynamodb = { module = "software.amazon.awssdk:dynamodb" }
 aws-kinesis = { module = "software.amazon.awssdk:kinesis" }
 aws-netty = { module = "software.amazon.awssdk:netty-nio-client" }
 aws-opensearch = { module = "software.amazon.awssdk:opensearch" }
 aws-url-connection-client = { module = "software.amazon.awssdk:url-connection-client" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version = "1.14.4" }
 floci-testcontainers = { module = "io.floci:testcontainers-floci", version.ref = "floci" }
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
 jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
@@ -29,6 +31,7 @@ slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 testcontainers-core = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
 testcontainers-junit5 = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }
 vertx-core = { module = "io.vertx:vertx-core", version.ref = "vertx" }
+vertx-launcher-application = { module = "io.vertx:vertx-launcher-application", version.ref = "vertx" }
 vertx-web-client = { module = "io.vertx:vertx-web-client", version.ref = "vertx" }
 
 [plugins]

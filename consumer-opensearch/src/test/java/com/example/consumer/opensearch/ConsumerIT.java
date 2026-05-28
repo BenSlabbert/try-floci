@@ -7,7 +7,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.floci.testcontainers.FlociContainer;
+import io.vertx.core.DeploymentOptions;
+import io.vertx.core.ThreadingModel;
 import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonObject;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -17,8 +20,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -30,38 +31,53 @@ import software.amazon.awssdk.services.kinesis.KinesisClient;
 import software.amazon.awssdk.services.kinesis.model.CreateStreamRequest;
 import software.amazon.awssdk.services.kinesis.model.PutRecordRequest;
 import software.amazon.awssdk.services.kinesis.model.StreamStatus;
+import software.amazon.awssdk.services.opensearch.OpenSearchClient;
 
 @Testcontainers
 class ConsumerIT {
 
     @Container
-    static final FlociContainer floci = new FlociContainer();
-
-    @SuppressWarnings("resource")
-    @Container
-    static final GenericContainer<?> opensearch = new GenericContainer<>("opensearchproject/opensearch:2")
-            .withEnv("discovery.type", "single-node")
-            .withEnv("DISABLE_SECURITY_PLUGIN", "true")
-            .withExposedPorts(9200)
-            .waitingFor(Wait.forHttp("/_cluster/health?wait_for_status=yellow").forStatusCode(200));
+    static final FlociContainer floci = new FlociContainer().withOpenSearchConfig(c -> c.mock(true));
 
     private static final String STREAM_NAME = "test-events";
     private static final String INDEX_NAME = "test-events";
+    private static final String OS_DOMAIN = "test-domain";
 
     private KinesisClient kinesisClient;
     private Vertx vertx;
+    private String openSearchEndpoint;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         StaticCredentialsProvider credentials = StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(floci.getAccessKey(), floci.getSecretKey()));
+        URI endpoint = URI.create(floci.getEndpoint());
+        Region region = Region.of(floci.getRegion());
 
         kinesisClient = KinesisClient.builder()
-                .endpointOverride(URI.create(floci.getEndpoint()))
-                .region(Region.of(floci.getRegion()))
+                .endpointOverride(endpoint)
+                .region(region)
                 .credentialsProvider(credentials)
                 .httpClientBuilder(UrlConnectionHttpClient.builder())
                 .build();
+
+        try (OpenSearchClient osClient = OpenSearchClient.builder()
+                .endpointOverride(endpoint)
+                .region(region)
+                .credentialsProvider(credentials)
+                .httpClientBuilder(UrlConnectionHttpClient.builder())
+                .build()) {
+            osClient.createDomain(r -> r.domainName(OS_DOMAIN));
+            for (int i = 0; i < 30; i++) {
+                var status =
+                        osClient.describeDomain(r -> r.domainName(OS_DOMAIN)).domainStatus();
+                if (status.endpoint() != null && !status.endpoint().isBlank()) {
+                    openSearchEndpoint = "http://" + status.endpoint();
+                    break;
+                }
+                Thread.sleep(500);
+            }
+        }
 
         vertx = Vertx.vertx();
     }
@@ -81,13 +97,27 @@ class ConsumerIT {
         createStream();
         publishTestEvents(3);
 
-        String opensearchEndpoint = "http://" + opensearch.getHost() + ":" + opensearch.getMappedPort(9200);
-        ConsumerVerticle verticle = new ConsumerVerticle(kinesisClient, STREAM_NAME, opensearchEndpoint, INDEX_NAME);
-        vertx.deployVerticle(verticle).toCompletionStage().toCompletableFuture().get();
+        JsonObject config = new JsonObject()
+                .put("awsEndpointUrl", floci.getEndpoint())
+                .put("awsRegion", floci.getRegion())
+                .put("awsAccessKeyId", floci.getAccessKey())
+                .put("awsSecretAccessKey", floci.getSecretKey())
+                .put("streamName", STREAM_NAME)
+                .put("opensearchEndpoint", openSearchEndpoint)
+                .put("indexName", INDEX_NAME);
+
+        vertx.deployVerticle(
+                        ConsumerVerticle.class.getName(),
+                        new DeploymentOptions()
+                                .setThreadingModel(ThreadingModel.VIRTUAL_THREAD)
+                                .setConfig(config))
+                .toCompletionStage()
+                .toCompletableFuture()
+                .get();
 
         Thread.sleep(4000);
 
-        String searchUrl = opensearchEndpoint + "/" + INDEX_NAME + "/_search";
+        String searchUrl = openSearchEndpoint + "/" + INDEX_NAME + "/_search";
         HttpClient httpClient = HttpClient.newHttpClient();
         HttpResponse<String> response = httpClient.send(
                 HttpRequest.newBuilder().uri(URI.create(searchUrl)).GET().build(),
