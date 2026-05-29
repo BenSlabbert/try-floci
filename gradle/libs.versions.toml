@@ -9,7 +9,7 @@ palantir = "2.91.0"
 shadow = "9.4.2"
 slf4j = "2.0.18"
 spotless = "8.6.0"
-testcontainers = "1.21.3"
+testcontainers = "1.21.4"
 vertx = "5.1.0"
 
 [libraries]
