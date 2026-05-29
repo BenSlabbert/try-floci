@@ -29,5 +29,5 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Download dependencies
-        run: ./gradlew dependencies --console=plain --no-daemon
+      - name: Build without tests
+        run: ./gradlew build -x test --console=plain --no-daemon
