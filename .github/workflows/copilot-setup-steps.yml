@@ -27,7 +27,7 @@ jobs:
           distribution: 'graalvm'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@v6.1.0
 
       - name: Build without tests
         run: ./gradlew build -x test --console=plain --no-daemon
