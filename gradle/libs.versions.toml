@@ -1,6 +1,6 @@
 [versions]
 assertj = "3.27.7"
-awsSdk = "2.44.14"
+awsSdk = "2.46.3"
 floci = "2.7.0"
 jackson = "2.21.3"
 junit = "6.1.0"
